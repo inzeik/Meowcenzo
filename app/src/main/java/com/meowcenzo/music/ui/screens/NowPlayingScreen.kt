@@ -31,10 +31,8 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -115,6 +113,7 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
     Column(
         modifier = Modifier.fillMaxSize().background(Meow.Ink).statusBarsPadding().navigationBarsPadding()
     ) {
+        // --- TOP HEADER ---
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -130,9 +129,9 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.width(6.dp).height(6.dp).background(Meow.TextHi, RectangleShape))
                 Spacer(Modifier.width(8.dp))
-                LabText(
-                    text = if (pagerState.currentPage == 0) "NOW_DIFFUSING" else "UP_NEXT_QUEUE",
-                    style = MaterialTheme.typography.titleMedium,
+                Text(
+                    text = (if (pagerState.currentPage == 0) "NOW_DIFFUSING" else "UP_NEXT_QUEUE").uppercase(Locale.getDefault()),
+                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
                     color = Meow.TextHi
                 )
                 Spacer(Modifier.width(8.dp))
@@ -141,8 +140,12 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
             Spacer(Modifier.size(36.dp))
         }
 
+        // --- SLIDING PAGER ---
         HorizontalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
             if (page == 0) {
+                // ==========================================
+                // PLAYER PAGE
+                // ==========================================
                 Column(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -153,7 +156,7 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Box(
-                            Modifier.fillMaxWidth(0.9f).aspectRatio(1f)
+                            Modifier.fillMaxWidth(0.95f).aspectRatio(1f)
                                 .graphicsLayer { scaleX = artScale; scaleY = artScale }
                                 .border(1.dp, Meow.Line, RectangleShape)
                         ) {
@@ -168,8 +171,8 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
                             ) {
                                 Box(Modifier.size(4.dp).alpha(dotAlpha).background(Color(0xFFFF2A2A), CircleShape))
                                 Spacer(Modifier.width(4.dp))
-                                LabText(
-                                    text = "$metaFormat // $metaBitrate // $metaSampleRate // $metaBitDepth",
+                                Text(
+                                    text = "$metaFormat // $metaBitrate // $metaSampleRate // $metaBitDepth".uppercase(Locale.getDefault()),
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 8.sp,
@@ -183,17 +186,17 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
                         Spacer(Modifier.height(24.dp))
 
                         Column(Modifier.fillMaxWidth()) {
-                            LabText(
-                                text = song?.title ?: ui.title ?: "UNKNOWN TRACK",
-                                style = MaterialTheme.typography.headlineMedium,
+                            Text(
+                                text = (song?.title ?: ui.title ?: "UNKNOWN TRACK").uppercase(Locale.getDefault()),
+                                style = MaterialTheme.typography.headlineMedium.copy(fontFamily = FontFamily.Monospace),
                                 color = Meow.TextHi,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Spacer(Modifier.height(4.dp))
-                            LabText(
-                                text = song?.artist ?: ui.artist ?: "UNKNOWN ARTIST",
-                                style = MaterialTheme.typography.bodyLarge,
+                            Text(
+                                text = (song?.artist ?: ui.artist ?: "UNKNOWN ARTIST").uppercase(Locale.getDefault()),
+                                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
                                 color = Meow.TextLo,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -211,12 +214,12 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
                                 onSeek = { fraction -> scrub = fraction; vm.player.seekToFraction(fraction) }
                             )
                             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                LabText(
+                                Text(
                                     text = formatTime((progress * ui.durationMs).toLong()),
                                     style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
                                     color = Meow.TextHi
                                 )
-                                LabText(
+                                Text(
                                     text = formatTime(ui.durationMs),
                                     style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
                                     color = Meow.TextLo
@@ -234,7 +237,7 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
                             }
 
                             Box(
-                                modifier = Modifier.size(56.dp).clip(RectangleShape).background(Meow.PanelHigh).border(1.dp, Meow.Line, RectangleShape).clickable { vm.player.previous() },
+                                modifier = Modifier.size(56.dp, 56.dp).clip(RectangleShape).background(Meow.PanelHigh).border(1.dp, Meow.Line, RectangleShape).clickable { vm.player.previous() },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Meow.TextHi, modifier = Modifier.size(28.dp))
@@ -253,7 +256,7 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
                             }
 
                             Box(
-                                modifier = Modifier.size(56.dp).clip(RectangleShape).background(Meow.PanelHigh).border(1.dp, Meow.Line, RectangleShape).clickable { vm.player.next() },
+                                modifier = Modifier.size(56.dp, 56.dp).clip(RectangleShape).background(Meow.PanelHigh).border(1.dp, Meow.Line, RectangleShape).clickable { vm.player.next() },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Rounded.SkipNext, "Next", tint = Meow.TextHi, modifier = Modifier.size(28.dp))
@@ -294,22 +297,27 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
                     }
                 }
             } else {
-                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+                // ==========================================
+                // QUEUE PAGE (FIXED ALIGNMENT)
+                // ==========================================
+                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                     Row(
-                        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        LabText(
-                            text = "UP_NEXT // ${ui.queueIds.size} TRACKS",
-                            style = MaterialTheme.typography.titleLarge,
+                        Text(
+                            text = "UP_NEXT // ${ui.queueIds.size} TRACKS".uppercase(Locale.getDefault()),
+                            style = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Monospace),
                             color = Meow.TextHi
                         )
-                        LabText(
+                        Text(
                             text = "RETURN >",
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.titleSmall.copy(fontFamily = FontFamily.Monospace),
                             color = Meow.TextHi,
-                            modifier = Modifier.clickable { coroutineScope.launch { pagerState.animateScrollToPage(0) } }
+                            modifier = Modifier
+                                .clickable { coroutineScope.launch { pagerState.animateScrollToPage(0) } }
+                                .padding(4.dp)
                         )
                     }
 
@@ -319,14 +327,19 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
                         itemsIndexed(ui.queueIds) { i, id ->
                             val s = songMap[id]
                             val current = i == ui.index
+
+                            // FLOATING BLOCK STYLING
                             Row(
-                                Modifier.fillMaxWidth()
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp) // Space between rows
+                                    .background(if (current) Meow.PanelHigh else Color.Transparent, RectangleShape)
+                                    .border(1.dp, if (current) Meow.Line else Color.Transparent, RectangleShape)
                                     .clickable { vm.player.skipTo(i) }
-                                    .background(if (current) Meow.PanelHigh else Color.Transparent)
-                                    .padding(vertical = 12.dp),
+                                    .padding(horizontal = 12.dp, vertical = 12.dp), // Inner padding
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                LabText(
+                                Text(
                                     text = String.format("%02d", i + 1),
                                     style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
                                     color = if (current) Meow.TextHi else Meow.TextLo,
@@ -335,16 +348,16 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
 
                                 ArtworkImage(s, Modifier.size(48.dp).border(1.dp, Meow.Line, RectangleShape), RectangleShape, px = 128)
 
-                                Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                                    LabText(
-                                        text = s?.title ?: "UNKNOWN",
-                                        style = MaterialTheme.typography.titleMedium,
+                                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                    Text(
+                                        text = (s?.title ?: "UNKNOWN").uppercase(Locale.getDefault()),
+                                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
                                         color = if (current) Meow.TextHi else Meow.TextLo,
                                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     )
-                                    LabText(
-                                        text = s?.artist ?: "",
-                                        style = MaterialTheme.typography.bodySmall,
+                                    Text(
+                                        text = s?.artist?.uppercase(Locale.getDefault()) ?: "",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                                         color = Meow.TextLo,
                                         maxLines = 1, overflow = TextOverflow.Ellipsis
                                     )
@@ -358,7 +371,6 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
                                     Icon(Icons.Rounded.PlayArrow, null, tint = Meow.TextHi, modifier = Modifier.size(24.dp))
                                 }
                             }
-                            HorizontalDivider(color = Meow.Line.copy(alpha = 0.3f))
                         }
                         item { Spacer(Modifier.height(24.dp)) }
                     }
@@ -377,27 +389,7 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
     }
 }
 
-@Composable
-fun LabText(
-    text: String,
-    modifier: Modifier = Modifier,
-    style: TextStyle = LocalTextStyle.current,
-    color: Color = Color.Unspecified,
-    maxLines: Int = Int.MAX_VALUE,
-    overflow: TextOverflow = TextOverflow.Clip,
-    textAlign: TextAlign? = null
-) {
-    Text(
-        text = text.uppercase(Locale.getDefault()),
-        modifier = modifier,
-        style = style,
-        color = color,
-        maxLines = maxLines,
-        overflow = overflow,
-        textAlign = textAlign
-    )
-}
-
+// --- SEGMENTED TERMINAL SEEK BAR ---
 @Composable
 fun TerminalSeekBar(progress: Float, onSeek: (Float) -> Unit) {
     BoxWithConstraints(
@@ -443,6 +435,7 @@ fun TerminalSeekBar(progress: Float, onSeek: (Float) -> Unit) {
     }
 }
 
+// --- MONOCHROME UTILITY TILE ---
 @Composable
 private fun MonoTile(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -462,9 +455,12 @@ private fun MonoTile(
         Icon(icon, null, tint = if (active) Meow.TextHi else Meow.TextLo, modifier = Modifier.size(16.dp))
         if (showLabel && label.isNotEmpty()) {
             Spacer(Modifier.width(4.dp))
-            LabText(
-                text = label,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            Text(
+                text = label.uppercase(Locale.getDefault()),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace
+                ),
                 color = if (active) Meow.TextHi else Meow.TextLo,
                 maxLines = 1,
                 overflow = TextOverflow.Clip

@@ -2,6 +2,7 @@ package com.meowcenzo.music.playback
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.media.audiofx.AudioEffect
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -37,11 +38,30 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         player.addListener(object : Player.Listener {
+            // 1. Trigger when the player creates a new audio track
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                EqualizerManager.attach(audioSessionId)
+                if (audioSessionId != C.AUDIO_SESSION_ID_UNSET) {
+                    EqualizerManager.attach(audioSessionId)
+                    broadcastAudioSession(audioSessionId)
+                }
+            }
+
+            // 2. Fallback: Trigger when playback starts (in case the ID was missed)
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPlaying) {
+                    val currentSessionId = player.audioSessionId
+                    if (currentSessionId != C.AUDIO_SESSION_ID_UNSET) {
+                        EqualizerManager.attach(currentSessionId)
+                        broadcastAudioSession(currentSessionId)
+                    }
+                }
             }
         })
-        EqualizerManager.attach(player.audioSessionId)
+
+        // Initial attach attempt
+        if (player.audioSessionId != C.AUDIO_SESSION_ID_UNSET) {
+            EqualizerManager.attach(player.audioSessionId)
+        }
 
         val openApp = PendingIntent.getActivity(
             this, 0,
@@ -70,6 +90,16 @@ class PlaybackService : MediaSessionService() {
         SleepTimer.onFinish = { player.pause() }
     }
 
+    // Helper to broadcast the session open action
+    private fun broadcastAudioSession(sessionId: Int) {
+        try {
+            val intent = Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION)
+            intent.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, sessionId)
+            intent.putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+            sendBroadcast(intent)
+        } catch (_: Exception) { }
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -83,6 +113,18 @@ class PlaybackService : MediaSessionService() {
         SleepTimer.onFinish = null
         SleepTimer.cancel()
         EqualizerManager.release()
+
+        // FIXED: Cast session.player to ExoPlayer to get the audioSessionId
+        val exoPlayer = session?.player as? ExoPlayer
+        exoPlayer?.audioSessionId?.let { sessionId ->
+            if (sessionId != C.AUDIO_SESSION_ID_UNSET) {
+                val intent = Intent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION)
+                intent.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, sessionId)
+                intent.putExtra(AudioEffect.EXTRA_PACKAGE_NAME, packageName)
+                sendBroadcast(intent)
+            }
+        }
+
         session?.run {
             player.release()
             release()

@@ -10,48 +10,37 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.rounded.AudioFile
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meowcenzo.music.MusicViewModel
 import com.meowcenzo.music.data.Song
-import com.meowcenzo.music.ui.components.BigTileButton
 import com.meowcenzo.music.ui.components.NamePlaylistDialog
 import com.meowcenzo.music.ui.components.PlaylistPickerDialog
 import com.meowcenzo.music.ui.components.SongOptionsSheet
@@ -61,6 +50,7 @@ import com.meowcenzo.music.ui.screens.HomeScreen
 import com.meowcenzo.music.ui.screens.MiniPlayer
 import com.meowcenzo.music.ui.screens.NowPlayingScreen
 import com.meowcenzo.music.ui.theme.Meow
+import java.util.Locale
 
 @Composable
 fun MeowcenzoApp(vm: MusicViewModel = viewModel()) {
@@ -127,7 +117,8 @@ private fun Shell(vm: MusicViewModel) {
                     vm = vm,
                     onOpenPlayer = { showNow = true },
                     onOpenSettings = { /* TODO: Settings Navigation */ },
-                    onOpenEqualizer = { push(Route.Equalizer) }
+                    onOpenEqualizer = { push(Route.Equalizer) },
+                    onNavigate = push
                 )
                 is Route.Album -> {
                     val list = songs.filter { it.albumId == route.id && it.album == route.name }.sortedBy { it.track }
@@ -210,31 +201,246 @@ private fun Shell(vm: MusicViewModel) {
     }
 }
 
+// ==========================================
+// ANIMATED TERMINAL PERMISSION SCREEN
+// ==========================================
 @Composable
 private fun PermissionScreen(onAllow: () -> Unit) {
     val context = LocalContext.current
+
+    // --- ANIMATIONS ---
+    val cursorAlpha by rememberInfiniteTransition(label = "cursor").animateFloat(
+        initialValue = 1f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(600, easing = LinearEasing), RepeatMode.Reverse),
+        label = "cursorAlpha"
+    )
+    val dotAlpha by rememberInfiniteTransition(label = "dot").animateFloat(
+        initialValue = 0.2f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(800, easing = LinearEasing), RepeatMode.Reverse),
+        label = "dotAlpha"
+    )
+    val bracketScale by rememberInfiniteTransition(label = "pulse").animateFloat(
+        initialValue = 0.95f, targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bracketScale"
+    )
+    val scanLineY by rememberInfiniteTransition(label = "scan").animateFloat(
+        initialValue = 0f, targetValue = 120f,
+        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing), RepeatMode.Restart),
+        label = "scanLineY"
+    )
+
     Column(
-        Modifier.fillMaxSize().padding(32.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Meow.Ink)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Box(
-            Modifier.size(104.dp).clip(Meow.TileLarge).background(Meow.gradient),
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Rounded.MusicNote, null, tint = Meow.Ink, modifier = Modifier.size(52.dp)) }
-        Spacer(Modifier.height(24.dp))
-        Text("Your music, offline", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Meowcenzo plays the songs already on this phone. Allow access to your audio files to build your library.",
-            style = MaterialTheme.typography.bodyMedium, color = Meow.TextLo, textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(28.dp))
-        BigTileButton("Allow access", Icons.Rounded.LibraryMusic, onAllow, Modifier.fillMaxWidth(), primary = true)
-        TextButton(onClick = {
-            context.startActivity(
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+
+        // --- TOP STATUS BAR ---
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .alpha(dotAlpha)
+                        .background(Color(0xFFFF2A2A), CircleShape)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "STATUS: WAITING".uppercase(Locale.getDefault()),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Meow.TextLo
+                )
+            }
+            Text(
+                text = "MEM: 64% // CPU: 1.2GHZ".uppercase(Locale.getDefault()),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = Meow.TextLo.copy(alpha = 0.5f)
             )
-        }) { Text("Open app settings", color = Meow.TextLo) }
+        }
+
+        // --- CENTER SECTION ---
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+            // Targeting Bracket Icon Box
+            Box(
+                Modifier
+                    .size(120.dp)
+                    .graphicsLayer {
+                        scaleX = bracketScale
+                        scaleY = bracketScale
+                    }
+                    .drawBehind {
+                        val stroke = 4.dp.toPx()
+                        val length = 24.dp.toPx()
+
+                        // Draw Brackets
+                        drawLine(Meow.TextHi, Offset(0f, 0f), Offset(length, 0f), stroke)
+                        drawLine(Meow.TextHi, Offset(0f, 0f), Offset(0f, length), stroke)
+                        drawLine(Meow.TextHi, Offset(size.width, 0f), Offset(size.width - length, 0f), stroke)
+                        drawLine(Meow.TextHi, Offset(size.width, 0f), Offset(size.width, length), stroke)
+                        drawLine(Meow.TextHi, Offset(0f, size.height), Offset(length, size.height), stroke)
+                        drawLine(Meow.TextHi, Offset(0f, size.height), Offset(0f, size.height - length), stroke)
+                        drawLine(Meow.TextHi, Offset(size.width, size.height), Offset(size.width - length, size.height), stroke)
+                        drawLine(Meow.TextHi, Offset(size.width, size.height), Offset(size.width, size.height - length), stroke)
+
+                        // Draw Scanning Radar Line
+                        val y = scanLineY.dp.toPx()
+                        drawLine(
+                            color = Meow.TextHi.copy(alpha = 0.3f),
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = 2.dp.toPx()
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.AudioFile,
+                    contentDescription = "Audio Access",
+                    tint = Meow.TextHi,
+                    modifier = Modifier.size(64.dp)
+                )
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            Text(
+                text = "MEOWCENZO".uppercase(Locale.getDefault()),
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 4.sp
+                ),
+                color = Meow.TextHi,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = "[ LOCAL AUDIO PLAYER ]".uppercase(Locale.getDefault()),
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = Meow.TextLo,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(32.dp))
+
+            // --- TERMINAL LOG BOX ---
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Meow.Line.copy(alpha = 0.5f), RectangleShape)
+                    .background(Meow.PanelHigh.copy(alpha = 0.2f), RectangleShape)
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = "SYS.LOG: PERMISSION_CHECK".uppercase(Locale.getDefault()),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Meow.TextLo
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "> TO BUILD YOUR LIBRARY AND PLAY YOUR MUSIC, MEOWCENZO NEEDS ACCESS TO THE AUDIO FILES ALREADY ON THIS DEVICE.".uppercase(Locale.getDefault()),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        lineHeight = 22.sp
+                    ),
+                    color = Meow.TextHi,
+                    textAlign = TextAlign.Start,
+                )
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            // --- HIGH-CONTRAST ACTION BUTTON ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(RectangleShape)
+                    .background(Meow.TextHi, RectangleShape)
+                    .clickable { onAllow() }, // Standard clickable fixes the error
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "> ALLOW ACCESS",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Black
+                    ),
+                    color = Meow.Ink
+                )
+                Text(
+                    text = "_",
+                    modifier = Modifier.alpha(cursorAlpha),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Black
+                    ),
+                    color = Meow.Ink
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // --- SECONDARY BUTTON ---
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .border(1.dp, Meow.Line, RectangleShape)
+                    .clickable {
+                        context.startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "OPEN SETTINGS".uppercase(Locale.getDefault()),
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Meow.TextHi.copy(alpha = 0.7f)
+                )
+            }
+        }
+
+        // --- FOOTER ---
+        Text(
+            text = "V1.0 // BUILT BY INZEIK".uppercase(Locale.getDefault()),
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            ),
+            color = Meow.TextLo,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
     }
 }
