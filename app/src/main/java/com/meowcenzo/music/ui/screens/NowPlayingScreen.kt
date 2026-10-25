@@ -1,78 +1,58 @@
 package com.meowcenzo.music.ui.screens
 
+import android.media.MediaMetadataRetriever
+import android.os.Build
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Bedtime
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Equalizer
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material.icons.rounded.RepeatOne
-import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.SkipPrevious
-import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
 import com.meowcenzo.music.MusicViewModel
 import com.meowcenzo.music.playback.SleepTimer
-import com.meowcenzo.music.ui.components.ArtworkCache
 import com.meowcenzo.music.ui.components.ArtworkImage
-import com.meowcenzo.music.ui.components.GradientPlayButton
 import com.meowcenzo.music.ui.components.RectButton
 import com.meowcenzo.music.ui.components.SleepTimerDialog
-import com.meowcenzo.music.ui.components.WaveformSeekBar
-import com.meowcenzo.music.ui.components.accentColor
 import com.meowcenzo.music.ui.components.formatTime
 import com.meowcenzo.music.ui.theme.Meow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: () -> Unit) {
     val ui by vm.player.ui.collectAsState()
@@ -83,140 +63,319 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
     val song = ui.songId?.let { songMap[it] }
 
     var scrub by remember { mutableStateOf<Float?>(null) }
-    var showQueue by remember { mutableStateOf(false) }
     var showSleep by remember { mutableStateOf(false) }
 
-    val progress = scrub ?: if (ui.durationMs > 0) (ui.positionMs.toFloat() / ui.durationMs).coerceIn(0f, 1f) else 0f
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val coroutineScope = rememberCoroutineScope()
 
-    // Background tint is pulled from the album art (Apple Music style).
-    val accent by produceState(Meow.PanelHigh, song?.artKey) {
-        val bmp = song?.let { ArtworkCache.load(context, it, 128) }
-        value = bmp?.accentColor() ?: Meow.PanelHigh
+    // --- TELEMETRY STATE ---
+    var metaFormat by remember { mutableStateOf("AUDIO") }
+    var metaBitrate by remember { mutableStateOf("---") }
+    var metaSampleRate by remember { mutableStateOf("---") }
+    var metaBitDepth by remember { mutableStateOf("---") }
+
+    LaunchedEffect(song?.uri) {
+        if (song?.uri != null) {
+            metaFormat = "SCANNING..."
+            withContext(Dispatchers.IO) {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(context, song.uri)
+                    val mime = context.contentResolver.getType(song.uri)
+                    metaFormat = when {
+                        mime?.contains("mpeg") == true -> "MP3"
+                        mime?.contains("mp4") == true || mime?.contains("m4a") == true -> "M4A"
+                        mime?.contains("flac") == true -> "FLAC"
+                        mime?.contains("wav") == true -> "WAV"
+                        mime?.contains("ogg") == true -> "OGG"
+                        else -> "AUDIO"
+                    }
+                    val br = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+                    metaBitrate = br?.toLongOrNull()?.div(1000)?.let { "${it}KBPS" } ?: "VBR"
+                    val sr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE) else null
+                    metaSampleRate = sr?.toLongOrNull()?.div(1000)?.let { "${it}KHZ" } ?: "---"
+                    val bd = if (Build.VERSION.SDK_INT >= 33) retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITS_PER_SAMPLE) else null
+                    metaBitDepth = bd?.let { "${it}BIT" } ?: "---"
+                } catch (e: Exception) { metaFormat = "AUDIO" } finally { try { retriever.release() } catch (e: Exception) {} }
+            }
+        }
     }
-    val tint by animateColorAsState(accent, tween(700), label = "tint")
+
+    val infiniteTransition = rememberInfiniteTransition(label = "dot")
+    val dotAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(animation = tween(800, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+        label = "dotAlpha"
+    )
+
+    val progress = scrub ?: if (ui.durationMs > 0) (ui.positionMs.toFloat() / ui.durationMs).coerceIn(0f, 1f) else 0f
     val artScale by animateFloatAsState(
-        if (ui.isPlaying) 1f else 0.88f,
+        if (ui.isPlaying) 1f else 0.95f,
         spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "artScale",
     )
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(0f to tint, 0.85f to Meow.Ink))
+    // ROOT
+    Column(
+        modifier = Modifier.fillMaxSize().background(Meow.Ink).statusBarsPadding().navigationBarsPadding()
     ) {
-        Column(
-            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp),
+        // --- TOP HEADER ---
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Top bar
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                RectButton(Icons.Rounded.KeyboardArrowDown, onClose, filled = true, description = "Close")
-                Text(
-                    "Now playing",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Meow.TextHi.copy(alpha = 0.8f),
-                    modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                )
-                RectButton(Icons.AutoMirrored.Rounded.QueueMusic, { showQueue = true }, filled = true, description = "Queue")
-            }
-
-            // Artwork
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
-                val side = minOf(maxWidth, maxHeight)
-                ArtworkImage(
-                    song,
-                    Modifier.size(side).graphicsLayer { scaleX = artScale; scaleY = artScale },
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-                    px = 900,
-                )
-            }
-
-            // Title + favourite
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        song?.title ?: ui.title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        song?.artist ?: ui.artist,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Meow.TextHi.copy(alpha = 0.7f),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                val isFav = ui.songId?.let { it in favs } == true
-                RectButton(
-                    if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                    onClick = { ui.songId?.let(vm::toggleFavorite) },
-                    filled = true, tint = if (isFav) Meow.Coral else Meow.TextHi,
-                    description = "Favourite",
-                )
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            WaveformSeekBar(
-                seed = ui.songId ?: 0L,
-                progress = progress,
-                onScrub = { scrub = it },
-                onScrubEnd = { vm.player.seekToFraction(it); scrub = null },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-            )
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                val shown = (progress * ui.durationMs).toLong()
-                Text(formatTime(shown), style = MaterialTheme.typography.labelMedium, color = Meow.TextHi.copy(alpha = 0.7f))
-                Spacer(Modifier.weight(1f))
-                Text(formatTime(ui.durationMs), style = MaterialTheme.typography.labelMedium, color = Meow.TextHi.copy(alpha = 0.7f))
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // Transport
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Box(
+                Modifier.size(36.dp).border(1.dp, Meow.Line, RectangleShape).clickable { onClose() },
+                contentAlignment = Alignment.Center
             ) {
-                RectButton(
-                    Icons.Rounded.Shuffle, { vm.player.toggleShuffle() },
-                    tint = if (ui.shuffle) Meow.Coral else Meow.TextHi.copy(alpha = 0.7f), description = "Shuffle",
-                )
-                RectButton(Icons.Rounded.SkipPrevious, { vm.player.previous() }, size = 56.dp, iconSize = 32.dp, filled = true, description = "Previous")
-                GradientPlayButton(ui.isPlaying, { vm.player.togglePlay() })
-                RectButton(Icons.Rounded.SkipNext, { vm.player.next() }, size = 56.dp, iconSize = 32.dp, filled = true, description = "Next")
-                RectButton(
-                    if (ui.repeatMode == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                    { vm.player.cycleRepeat() },
-                    tint = if (ui.repeatMode != Player.REPEAT_MODE_OFF) Meow.Coral else Meow.TextHi.copy(alpha = 0.7f),
-                    description = "Repeat",
-                )
+                Icon(Icons.Rounded.KeyboardArrowDown, "Close", tint = Meow.TextHi, modifier = Modifier.size(20.dp))
             }
 
-            Spacer(Modifier.height(20.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.width(6.dp).height(6.dp).background(Meow.TextHi, RectangleShape))
+                Spacer(Modifier.width(8.dp))
+                LabText(
+                    text = if (pagerState.currentPage == 0) "NOW_DIFFUSING" else "UP_NEXT_QUEUE",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Meow.TextHi
+                )
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.width(6.dp).height(6.dp).background(Meow.TextHi, RectangleShape))
+            }
+            Spacer(Modifier.size(36.dp))
+        }
 
-            // Utility tiles
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
-                UtilityTile(Icons.Rounded.Speed, "${ui.speed}x", Modifier.weight(1f)) {
-                    val next = speeds[(speeds.indexOfFirst { it == ui.speed } + 1) % speeds.size]
-                    vm.player.setSpeed(next)
+        // --- SLIDING PAGER ---
+        HorizontalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
+            if (page == 0) {
+                // ==========================================
+                // PLAYER PAGE (FIXED LAYOUT)
+                // ==========================================
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(Modifier.weight(0.2f))
+
+                    // Album Art
+                    Box(
+                        Modifier.fillMaxWidth(0.95f).aspectRatio(1f)
+                            .graphicsLayer { scaleX = artScale; scaleY = artScale }
+                            .border(1.dp, Meow.Line, RectangleShape)
+                    ) {
+                        ArtworkImage(song, Modifier.fillMaxSize(), shape = RectangleShape, px = 1024)
+
+                        Row(
+                            Modifier.align(Alignment.TopStart).padding(6.dp)
+                                .background(Meow.Ink.copy(alpha = 0.85f), RectangleShape)
+                                .border(1.dp, Meow.Line, RectangleShape)
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(Modifier.size(4.dp).alpha(dotAlpha).background(Color(0xFFFF2A2A), CircleShape))
+                            Spacer(Modifier.width(4.dp))
+                            LabText(
+                                text = "$metaFormat // $metaBitrate // $metaSampleRate // $metaBitDepth",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                color = Meow.TextHi
+                            )
+                        }
+                    }
+
+                    // Title & Artist
+                    Column(Modifier.fillMaxWidth()) {
+                        LabText(
+                            text = song?.title ?: ui.title ?: "UNKNOWN TRACK",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Meow.TextHi,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        LabText(
+                            text = song?.artist ?: ui.artist ?: "UNKNOWN ARTIST",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Meow.TextLo,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // Terminal Seek Bar
+                    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        TerminalSeekBar(
+                            progress = progress,
+                            onSeek = { fraction -> scrub = fraction; vm.player.seekToFraction(fraction) }
+                        )
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            LabText(
+                                text = formatTime((progress * ui.durationMs).toLong()),
+                                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                color = Meow.TextHi
+                            )
+                            LabText(
+                                text = formatTime(ui.durationMs),
+                                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                color = Meow.TextLo
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.weight(0.3f))
+
+                    // TRANSPORT CONTROLS
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { vm.player.toggleShuffle() }) {
+                            Icon(Icons.Rounded.Shuffle, "Shuffle", tint = if (ui.shuffle) Meow.TextHi else Meow.TextLo, modifier = Modifier.size(28.dp))
+                        }
+
+                        Box(
+                            modifier = Modifier.size(56.dp).clip(RectangleShape).background(Meow.PanelHigh).border(1.dp, Meow.Line, RectangleShape).clickable { vm.player.previous() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Meow.TextHi, modifier = Modifier.size(28.dp))
+                        }
+
+                        Box(
+                            modifier = Modifier.size(76.dp).clip(RectangleShape).background(Meow.TextHi).clickable { vm.player.togglePlay() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                if (ui.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = "Play/Pause",
+                                tint = Meow.Ink,
+                                modifier = Modifier.size(44.dp)
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier.size(56.dp).clip(RectangleShape).background(Meow.PanelHigh).border(1.dp, Meow.Line, RectangleShape).clickable { vm.player.next() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.SkipNext, "Next", tint = Meow.TextHi, modifier = Modifier.size(28.dp))
+                        }
+
+                        IconButton(onClick = { vm.player.cycleRepeat() }) {
+                            Icon(
+                                if (ui.repeatMode == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                                "Repeat",
+                                tint = if (ui.repeatMode != Player.REPEAT_MODE_OFF) Meow.TextHi else Meow.TextLo,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
+
+                    // GOLDEN FEATURES
+                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
+
+                        MonoTile(Icons.Rounded.Speed, "${ui.speed}x", Modifier.weight(1f)) {
+                            val next = speeds[(speeds.indexOfFirst { it == ui.speed } + 1) % speeds.size]
+                            vm.player.setSpeed(next)
+                        }
+                        MonoTile(
+                            Icons.Rounded.Bedtime, if (remaining > 0) formatTime(remaining) else "SLEEP",
+                            Modifier.weight(1f), active = remaining > 0,
+                        ) { showSleep = true }
+                        MonoTile(Icons.Rounded.Equalizer, "EQ", Modifier.weight(1f), onClick = onOpenEqualizer)
+                        MonoTile(Icons.AutoMirrored.Rounded.QueueMusic, "QUEUE", Modifier.weight(1f)) {
+                            coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                        }
+
+                        val isFav = ui.songId?.let { it in favs } == true
+                        MonoTile(
+                            if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                            "", Modifier.size(48.dp), active = isFav, showLabel = false
+                        ) { ui.songId?.let(vm::toggleFavorite) }
+                    }
                 }
-                UtilityTile(
-                    Icons.Rounded.Bedtime,
-                    if (remaining > 0) formatTime(remaining) else "Sleep",
-                    Modifier.weight(1f),
-                    active = remaining > 0,
-                ) { showSleep = true }
-                UtilityTile(Icons.Rounded.Equalizer, "EQ", Modifier.weight(1f), onClick = onOpenEqualizer)
+            } else {
+                // ==========================================
+                // QUEUE PAGE
+                // ==========================================
+                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        LabText(
+                            text = "UP_NEXT // ${ui.queueIds.size} TRACKS",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Meow.TextHi
+                        )
+                        LabText(
+                            text = "RETURN >",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Meow.TextHi,
+                            modifier = Modifier.clickable { coroutineScope.launch { pagerState.animateScrollToPage(0) } }
+                        )
+                    }
+
+                    HorizontalDivider(color = Meow.Line, thickness = 1.dp)
+
+                    LazyColumn(Modifier.fillMaxSize()) {
+                        itemsIndexed(ui.queueIds) { i, id ->
+                            val s = songMap[id]
+                            val current = i == ui.index
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .clickable { vm.player.skipTo(i) }
+                                    .background(if (current) Meow.PanelHigh else Color.Transparent)
+                                    .padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                LabText(
+                                    text = String.format("%02d", i + 1),
+                                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
+                                    color = if (current) Meow.TextHi else Meow.TextLo,
+                                    modifier = Modifier.width(36.dp)
+                                )
+
+                                ArtworkImage(s, Modifier.size(48.dp).border(1.dp, Meow.Line, RectangleShape), RectangleShape, px = 128)
+
+                                Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+                                    LabText(
+                                        text = s?.title ?: "UNKNOWN",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = if (current) Meow.TextHi else Meow.TextLo,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    )
+                                    LabText(
+                                        text = s?.artist ?: "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Meow.TextLo,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                if (!current) {
+                                    IconButton(onClick = { vm.player.removeAt(i) }) {
+                                        Icon(Icons.Rounded.Close, "Remove", tint = Meow.TextLo, modifier = Modifier.size(20.dp))
+                                    }
+                                } else {
+                                    Icon(Icons.Rounded.PlayArrow, null, tint = Meow.TextHi, modifier = Modifier.size(24.dp))
+                                }
+                            }
+                            HorizontalDivider(color = Meow.Line.copy(alpha = 0.3f))
+                        }
+                        item { Spacer(Modifier.height(24.dp)) }
+                    }
+                }
             }
-            Spacer(Modifier.height(12.dp))
         }
     }
 
-    if (showQueue) QueueSheet(vm, onDismiss = { showQueue = false })
     if (showSleep) {
         SleepTimerDialog(
             activeMinutesLabel = if (remaining > 0) formatTime(remaining) else null,
@@ -227,70 +386,101 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
     }
 }
 
+// --- ALL CAPS TEXT COMPONENT ---
 @Composable
-private fun UtilityTile(
-    icon: ImageVector,
+fun LabText(
+    text: String,
+    modifier: Modifier = Modifier,
+    style: TextStyle = LocalTextStyle.current,
+    color: Color = Color.Unspecified,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+    textAlign: TextAlign? = null
+) {
+    Text(
+        text = text.uppercase(Locale.getDefault()),
+        modifier = modifier,
+        style = style,
+        color = color,
+        maxLines = maxLines,
+        overflow = overflow,
+        textAlign = textAlign
+    )
+}
+
+// --- SEGMENTED TERMINAL SEEK BAR ---
+@Composable
+fun TerminalSeekBar(progress: Float, onSeek: (Float) -> Unit) {
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth().height(32.dp).pointerInput(Unit) {
+            awaitEachGesture {
+                val down = awaitFirstDown()
+                val width = size.width.toFloat()
+                if (width > 0) {
+                    var fraction = (down.position.x / width).coerceIn(0f, 1f)
+                    onSeek(fraction)
+                    do {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        fraction = (change.position.x / width).coerceIn(0f, 1f)
+                        onSeek(fraction)
+                        change.consume()
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+        }
+    ) {
+        val totalBlocks = 40
+        val blockSpacing = 2.dp
+        val blockWidth = (maxWidth - (blockSpacing * (totalBlocks - 1))) / totalBlocks
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = blockWidth.toPx()
+            val gap = blockSpacing.toPx()
+            val h = size.height
+
+            for (i in 0 until totalBlocks) {
+                val x = i * (w + gap)
+                val blockProgress = i.toFloat() / totalBlocks
+                val isPlayed = blockProgress <= progress
+
+                drawRect(
+                    color = if (isPlayed) Meow.TextHi else Meow.PanelHigh,
+                    topLeft = Offset(x, 0f),
+                    size = Size(w, h)
+                )
+            }
+        }
+    }
+}
+
+// --- MONOCHROME UTILITY TILE ---
+@Composable
+private fun MonoTile(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     modifier: Modifier = Modifier,
     active: Boolean = false,
+    showLabel: Boolean = true,
     onClick: () -> Unit,
 ) {
     Row(
-        modifier
-            .height(46.dp)
-            .clip(Meow.Tile)
-            .background(Color.Black.copy(alpha = 0.28f))
+        modifier.height(48.dp).clip(RectangleShape).background(Meow.PanelHigh)
+            .border(1.dp, if (active) Meow.TextHi else Meow.Line, RectangleShape)
             .clickable(onClick = onClick),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = if (active) Meow.Coral else Meow.TextHi, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = if (active) Meow.Coral else Meow.TextHi)
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun QueueSheet(vm: MusicViewModel, onDismiss: () -> Unit) {
-    val ui by vm.player.ui.collectAsState()
-    val songMap by vm.songMap.collectAsState()
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = Meow.Panel,
-        contentColor = Meow.TextHi,
-        shape = Meow.TileLarge,
-    ) {
-        Text(
-            "Up next, ${ui.queueIds.size} songs",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-        )
-        LazyColumn(Modifier.heightIn(max = 520.dp)) {
-            itemsIndexed(ui.queueIds) { i, id ->
-                val s = songMap[id]
-                val current = i == ui.index
-                Row(
-                    Modifier.fillMaxWidth().clickable { vm.player.skipTo(i) }.padding(start = 24.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ArtworkImage(s, Modifier.size(44.dp), Meow.TileSmall, px = 128)
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text(
-                            s?.title ?: "Unknown",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = if (current) Meow.Coral else Meow.TextHi,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(s?.artist ?: "", style = MaterialTheme.typography.bodySmall, color = Meow.TextLo, maxLines = 1)
-                    }
-                    if (!current) {
-                        RectButton(Icons.Rounded.Close, { vm.player.removeAt(i) }, tint = Meow.TextLo, description = "Remove")
-                    }
-                }
-            }
+        Icon(icon, null, tint = if (active) Meow.TextHi else Meow.TextLo, modifier = Modifier.size(16.dp))
+        if (showLabel && label.isNotEmpty()) {
+            Spacer(Modifier.width(4.dp))
+            LabText(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = if (active) Meow.TextHi else Meow.TextLo,
+                maxLines = 1,
+                overflow = TextOverflow.Clip
+            )
         }
-        Spacer(Modifier.height(24.dp).navigationBarsPadding())
     }
 }

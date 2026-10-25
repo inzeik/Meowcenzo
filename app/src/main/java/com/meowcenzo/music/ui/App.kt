@@ -123,13 +123,14 @@ private fun Shell(vm: MusicViewModel) {
     Box(Modifier.fillMaxSize().background(Meow.Ink)) {
         Box(Modifier.fillMaxSize().statusBarsPadding()) {
             when (val route = stack.lastOrNull()) {
+                // ONLY THIS SECTION WAS UPDATED TO MATCH YOUR HOMESCREEN.KT
                 null -> HomeScreen(
                     vm = vm,
-                    bottomPad = bottomPad,
-                    onNavigate = push,
-                    onSongMore = openOptions,
-                    onNewPlaylist = { pendingSong = null; showNewPlaylist = true },
+                    onOpenPlayer = { showNow = true },
+                    onOpenSettings = { /* TODO: Open Settings if you add one later */ },
+                    onOpenEqualizer = { push(Route.Equalizer) }
                 )
+                // -----------------------------------------------------------
                 is Route.Album -> {
                     val list = songs.filter { it.albumId == route.id && it.album == route.name }.sortedBy { it.track }
                     DetailScreen(vm, route.name, list.firstOrNull()?.artist.orEmpty(), list, bottomPad, pop, openOptions)

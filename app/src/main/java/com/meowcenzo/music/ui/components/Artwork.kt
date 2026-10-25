@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape // ADDED IMPORT
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -101,8 +102,8 @@ private fun placeholderBrush(key: Long): Brush {
 fun ArtworkImage(
     song: Song?,
     modifier: Modifier = Modifier,
-    shape: Shape = Meow.Tile,
-    px: Int = 256,
+    shape: Shape = RectangleShape, // CHANGED: Default is now a perfect square
+    px: Int = 512,                 // CHANGED: Increased default resolution for better quality
 ) {
     val context = LocalContext.current
     val bitmap by produceState<Bitmap?>(initialValue = null, song?.artKey, px) {
