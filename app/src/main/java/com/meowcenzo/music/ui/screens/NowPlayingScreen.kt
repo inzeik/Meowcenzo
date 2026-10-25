@@ -2,7 +2,6 @@ package com.meowcenzo.music.ui.screens
 
 import android.media.MediaMetadataRetriever
 import android.os.Build
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -43,7 +42,6 @@ import androidx.media3.common.Player
 import com.meowcenzo.music.MusicViewModel
 import com.meowcenzo.music.playback.SleepTimer
 import com.meowcenzo.music.ui.components.ArtworkImage
-import com.meowcenzo.music.ui.components.RectButton
 import com.meowcenzo.music.ui.components.SleepTimerDialog
 import com.meowcenzo.music.ui.components.formatTime
 import com.meowcenzo.music.ui.theme.Meow
@@ -68,7 +66,6 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
     val pagerState = rememberPagerState(pageCount = { 2 })
     val coroutineScope = rememberCoroutineScope()
 
-    // --- TELEMETRY STATE ---
     var metaFormat by remember { mutableStateOf("AUDIO") }
     var metaBitrate by remember { mutableStateOf("---") }
     var metaSampleRate by remember { mutableStateOf("---") }
@@ -115,11 +112,9 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
         label = "artScale",
     )
 
-    // ROOT
     Column(
         modifier = Modifier.fillMaxSize().background(Meow.Ink).statusBarsPadding().navigationBarsPadding()
     ) {
-        // --- TOP HEADER ---
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -146,163 +141,159 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
             Spacer(Modifier.size(36.dp))
         }
 
-        // --- SLIDING PAGER ---
         HorizontalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth()) { page ->
             if (page == 0) {
-                // ==========================================
-                // PLAYER PAGE (FIXED LAYOUT)
-                // ==========================================
                 Column(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Spacer(Modifier.weight(0.2f))
-
-                    // Album Art
-                    Box(
-                        Modifier.fillMaxWidth(0.95f).aspectRatio(1f)
-                            .graphicsLayer { scaleX = artScale; scaleY = artScale }
-                            .border(1.dp, Meow.Line, RectangleShape)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        ArtworkImage(song, Modifier.fillMaxSize(), shape = RectangleShape, px = 1024)
+                        Box(
+                            Modifier.fillMaxWidth(0.9f).aspectRatio(1f)
+                                .graphicsLayer { scaleX = artScale; scaleY = artScale }
+                                .border(1.dp, Meow.Line, RectangleShape)
+                        ) {
+                            ArtworkImage(song, Modifier.fillMaxSize(), shape = RectangleShape, px = 1024)
+
+                            Row(
+                                Modifier.align(Alignment.TopStart).padding(6.dp)
+                                    .background(Meow.Ink.copy(alpha = 0.85f), RectangleShape)
+                                    .border(1.dp, Meow.Line, RectangleShape)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(Modifier.size(4.dp).alpha(dotAlpha).background(Color(0xFFFF2A2A), CircleShape))
+                                Spacer(Modifier.width(4.dp))
+                                LabText(
+                                    text = "$metaFormat // $metaBitrate // $metaSampleRate // $metaBitDepth",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Normal
+                                    ),
+                                    color = Meow.TextHi
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+
+                        Column(Modifier.fillMaxWidth()) {
+                            LabText(
+                                text = song?.title ?: ui.title ?: "UNKNOWN TRACK",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = Meow.TextHi,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            LabText(
+                                text = song?.artist ?: ui.artist ?: "UNKNOWN ARTIST",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Meow.TextLo,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            TerminalSeekBar(
+                                progress = progress,
+                                onSeek = { fraction -> scrub = fraction; vm.player.seekToFraction(fraction) }
+                            )
+                            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                LabText(
+                                    text = formatTime((progress * ui.durationMs).toLong()),
+                                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                    color = Meow.TextHi
+                                )
+                                LabText(
+                                    text = formatTime(ui.durationMs),
+                                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                    color = Meow.TextLo
+                                )
+                            }
+                        }
 
                         Row(
-                            Modifier.align(Alignment.TopStart).padding(6.dp)
-                                .background(Meow.Ink.copy(alpha = 0.85f), RectangleShape)
-                                .border(1.dp, Meow.Line, RectangleShape)
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(Modifier.size(4.dp).alpha(dotAlpha).background(Color(0xFFFF2A2A), CircleShape))
-                            Spacer(Modifier.width(4.dp))
-                            LabText(
-                                text = "$metaFormat // $metaBitrate // $metaSampleRate // $metaBitDepth",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                color = Meow.TextHi
-                            )
-                        }
-                    }
+                            IconButton(onClick = { vm.player.toggleShuffle() }) {
+                                Icon(Icons.Rounded.Shuffle, "Shuffle", tint = if (ui.shuffle) Meow.TextHi else Meow.TextLo, modifier = Modifier.size(28.dp))
+                            }
 
-                    // Title & Artist
-                    Column(Modifier.fillMaxWidth()) {
-                        LabText(
-                            text = song?.title ?: ui.title ?: "UNKNOWN TRACK",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = Meow.TextHi,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        LabText(
-                            text = song?.artist ?: ui.artist ?: "UNKNOWN ARTIST",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Meow.TextLo,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                            Box(
+                                modifier = Modifier.size(56.dp).clip(RectangleShape).background(Meow.PanelHigh).border(1.dp, Meow.Line, RectangleShape).clickable { vm.player.previous() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Meow.TextHi, modifier = Modifier.size(28.dp))
+                            }
 
-                    // Terminal Seek Bar
-                    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        TerminalSeekBar(
-                            progress = progress,
-                            onSeek = { fraction -> scrub = fraction; vm.player.seekToFraction(fraction) }
-                        )
-                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            LabText(
-                                text = formatTime((progress * ui.durationMs).toLong()),
-                                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
-                                color = Meow.TextHi
-                            )
-                            LabText(
-                                text = formatTime(ui.durationMs),
-                                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
-                                color = Meow.TextLo
-                            )
-                        }
-                    }
+                            Box(
+                                modifier = Modifier.size(76.dp).clip(RectangleShape).background(Meow.TextHi).clickable { vm.player.togglePlay() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    if (ui.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                    contentDescription = "Play/Pause",
+                                    tint = Meow.Ink,
+                                    modifier = Modifier.size(44.dp)
+                                )
+                            }
 
-                    Spacer(Modifier.weight(0.3f))
+                            Box(
+                                modifier = Modifier.size(56.dp).clip(RectangleShape).background(Meow.PanelHigh).border(1.dp, Meow.Line, RectangleShape).clickable { vm.player.next() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.SkipNext, "Next", tint = Meow.TextHi, modifier = Modifier.size(28.dp))
+                            }
 
-                    // TRANSPORT CONTROLS
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { vm.player.toggleShuffle() }) {
-                            Icon(Icons.Rounded.Shuffle, "Shuffle", tint = if (ui.shuffle) Meow.TextHi else Meow.TextLo, modifier = Modifier.size(28.dp))
+                            IconButton(onClick = { vm.player.cycleRepeat() }) {
+                                Icon(
+                                    if (ui.repeatMode == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                                    "Repeat",
+                                    tint = if (ui.repeatMode != Player.REPEAT_MODE_OFF) Meow.TextHi else Meow.TextLo,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
                         }
 
-                        Box(
-                            modifier = Modifier.size(56.dp).clip(RectangleShape).background(Meow.PanelHigh).border(1.dp, Meow.Line, RectangleShape).clickable { vm.player.previous() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Meow.TextHi, modifier = Modifier.size(28.dp))
-                        }
+                        Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
 
-                        Box(
-                            modifier = Modifier.size(76.dp).clip(RectangleShape).background(Meow.TextHi).clickable { vm.player.togglePlay() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                if (ui.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                contentDescription = "Play/Pause",
-                                tint = Meow.Ink,
-                                modifier = Modifier.size(44.dp)
-                            )
-                        }
+                            MonoTile(Icons.Rounded.Speed, "${ui.speed}x", Modifier.weight(1f)) {
+                                val next = speeds[(speeds.indexOfFirst { it == ui.speed } + 1) % speeds.size]
+                                vm.player.setSpeed(next)
+                            }
+                            MonoTile(
+                                Icons.Rounded.Bedtime, if (remaining > 0) formatTime(remaining) else "SLEEP",
+                                Modifier.weight(1f), active = remaining > 0,
+                            ) { showSleep = true }
+                            MonoTile(Icons.Rounded.Equalizer, "EQ", Modifier.weight(1f), onClick = onOpenEqualizer)
+                            MonoTile(Icons.AutoMirrored.Rounded.QueueMusic, "QUEUE", Modifier.weight(1f)) {
+                                coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                            }
 
-                        Box(
-                            modifier = Modifier.size(56.dp).clip(RectangleShape).background(Meow.PanelHigh).border(1.dp, Meow.Line, RectangleShape).clickable { vm.player.next() },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Rounded.SkipNext, "Next", tint = Meow.TextHi, modifier = Modifier.size(28.dp))
+                            val isFav = ui.songId?.let { it in favs } == true
+                            MonoTile(
+                                if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                "", Modifier.size(48.dp), active = isFav, showLabel = false
+                            ) { ui.songId?.let(vm::toggleFavorite) }
                         }
-
-                        IconButton(onClick = { vm.player.cycleRepeat() }) {
-                            Icon(
-                                if (ui.repeatMode == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                                "Repeat",
-                                tint = if (ui.repeatMode != Player.REPEAT_MODE_OFF) Meow.TextHi else Meow.TextLo,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
-
-                    // GOLDEN FEATURES
-                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val speeds = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
-
-                        MonoTile(Icons.Rounded.Speed, "${ui.speed}x", Modifier.weight(1f)) {
-                            val next = speeds[(speeds.indexOfFirst { it == ui.speed } + 1) % speeds.size]
-                            vm.player.setSpeed(next)
-                        }
-                        MonoTile(
-                            Icons.Rounded.Bedtime, if (remaining > 0) formatTime(remaining) else "SLEEP",
-                            Modifier.weight(1f), active = remaining > 0,
-                        ) { showSleep = true }
-                        MonoTile(Icons.Rounded.Equalizer, "EQ", Modifier.weight(1f), onClick = onOpenEqualizer)
-                        MonoTile(Icons.AutoMirrored.Rounded.QueueMusic, "QUEUE", Modifier.weight(1f)) {
-                            coroutineScope.launch { pagerState.animateScrollToPage(1) }
-                        }
-
-                        val isFav = ui.songId?.let { it in favs } == true
-                        MonoTile(
-                            if (isFav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                            "", Modifier.size(48.dp), active = isFav, showLabel = false
-                        ) { ui.songId?.let(vm::toggleFavorite) }
                     }
                 }
             } else {
-                // ==========================================
-                // QUEUE PAGE
-                // ==========================================
                 Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 12.dp),
@@ -386,7 +377,6 @@ fun NowPlayingScreen(vm: MusicViewModel, onClose: () -> Unit, onOpenEqualizer: (
     }
 }
 
-// --- ALL CAPS TEXT COMPONENT ---
 @Composable
 fun LabText(
     text: String,
@@ -408,7 +398,6 @@ fun LabText(
     )
 }
 
-// --- SEGMENTED TERMINAL SEEK BAR ---
 @Composable
 fun TerminalSeekBar(progress: Float, onSeek: (Float) -> Unit) {
     BoxWithConstraints(
@@ -454,7 +443,6 @@ fun TerminalSeekBar(progress: Float, onSeek: (Float) -> Unit) {
     }
 }
 
-// --- MONOCHROME UTILITY TILE ---
 @Composable
 private fun MonoTile(
     icon: androidx.compose.ui.graphics.vector.ImageVector,

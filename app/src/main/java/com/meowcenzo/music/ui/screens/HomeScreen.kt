@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -39,14 +40,6 @@ fun HomeScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("SONGS", "ALBUMS", "ARTISTS", "PLAYLISTS", "FAVS")
 
-    // I have commented this out so it doesn't crash on load.
-    // You can uncomment and type "vm." to see the correct method (e.g. vm.loadLibrary())
-    /*
-    LaunchedEffect(Unit) {
-        vm.loadSongs()
-    }
-    */
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -73,12 +66,12 @@ fun HomeScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Icon(Icons.Rounded.Search, "Search", tint = Meow.TextHi, modifier = Modifier.size(24.dp))
                 Icon(Icons.Rounded.Equalizer, "EQ", tint = Meow.TextHi, modifier = Modifier.size(24.dp).clickable { onOpenEqualizer() })
-                // Click this to refresh. Type "vm." after the opening parenthesis to find the right method.
-                Icon(Icons.Rounded.Refresh, "Refresh", tint = Meow.TextHi, modifier = Modifier.size(24.dp).clickable { /* vm.loadLibrary() */ })
+                // Note: If this is red, use whatever your ViewModel's refresh/load method is
+                Icon(Icons.Rounded.Refresh, "Refresh", tint = Meow.TextHi, modifier = Modifier.size(24.dp).clickable { /* vm.scan() */ })
             }
         }
 
-        // --- TABS (Hardware Switch Style) ---
+        // --- TABS ---
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -104,7 +97,7 @@ fun HomeScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // --- PLAY ALL / SHUFFLE BUTTONS ---
+        // --- PLAY ALL / SHUFFLE ---
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -118,7 +111,7 @@ fun HomeScreen(
                     .border(1.dp, Meow.Line, RectangleShape)
                     .clickable {
                         if (songs.isNotEmpty()) {
-                            // vm.player.playSong(songs.first())
+                            vm.player.playQueue(songs, startIndex = 0) // FIXED: playQueue
                             onOpenPlayer()
                         }
                     }
@@ -140,8 +133,7 @@ fun HomeScreen(
                     .border(1.dp, Meow.Line, RectangleShape)
                     .clickable {
                         if (songs.isNotEmpty()) {
-                            // vm.player.toggleShuffle()
-                            // vm.player.playSong(songs.random())
+                            vm.player.playQueue(songs, shuffle = true) // FIXED: playQueue
                             onOpenPlayer()
                         }
                     }
@@ -174,9 +166,9 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(songs.take(5)) { song ->
+                    itemsIndexed(songs.take(5)) { index, song ->
                         RecentlyPlayedCard(song) {
-                            // vm.player.playSong(song)
+                            vm.player.playQueue(songs, startIndex = index) // FIXED: playQueue
                             onOpenPlayer()
                         }
                     }
@@ -194,7 +186,7 @@ fun HomeScreen(
                         .border(1.dp, Meow.Line, RectangleShape)
                         .clickable {
                             if (songs.isNotEmpty()) {
-                                // vm.player.playSong(songs.first())
+                                vm.player.playQueue(songs, startIndex = 0) // FIXED: playQueue
                                 onOpenPlayer()
                             }
                         }
@@ -229,9 +221,10 @@ fun HomeScreen(
             }
 
             // Full Song List
-            items(songs) { song ->
+            itemsIndexed(songs) { index, song ->
                 SongListItem(song) {
-                    // vm.player.playSong(song)
+                    // Play the whole list, but start at the clicked index
+                    vm.player.playQueue(songs, startIndex = index)
                     onOpenPlayer()
                 }
             }
