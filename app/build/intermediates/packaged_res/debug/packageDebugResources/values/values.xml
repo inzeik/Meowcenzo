@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="meow_icon_bg">#0F0D12</color>
+    <string name="app_name">Meowcenzo</string>
+    <style name="Theme.Meowcenzo" parent="android:Theme.Material.NoActionBar"/>
+</resources>

@@ -4,7 +4,7 @@ Kotlin + Jetpack Compose + Media3. No internet permission, no third-party image 
 
 ## Install (5 steps)
 1. Copy everything under `app/src/main/java/com/example/meowcenzo/` into your project.
-   If your package is not `com.example.meowcenzo`, rename the package lines and imports.
+   If your package is not `com.meowcenzo.music`, rename the package lines and imports.
    Replace your existing `MainActivity.kt` and `ui/theme/Theme.kt` with these.
 2. Copy `res/drawable/ic_meow_fg.xml`, `res/values/meow_colors.xml` and the two
    `res/mipmap-anydpi-v26/*.xml` files (rectangular launcher icon).
