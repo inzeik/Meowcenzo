@@ -1,0 +1,11 @@
+// Add inside the existing `dependencies { ... }` block of app/build.gradle.kts
+// (versions are known-good; bump to the latest if you like)
+
+    // Background playback, media notification, lock-screen + Bluetooth controls
+    implementation("androidx.media3:media3-exoplayer:1.8.0")
+    implementation("androidx.media3:media3-session:1.8.0")
+    implementation("androidx.media3:media3-common:1.8.0")
+
+    // Rounded icon set + viewModel() in Compose (Compose BOM already supplies the icons version)
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
